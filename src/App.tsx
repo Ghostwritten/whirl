@@ -1,22 +1,26 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { WheelContainer } from '@/components/wheel/WheelContainer'
 import { EditorPanel } from '@/components/editor/EditorPanel'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import { SharePanel } from '@/components/settings/SharePanel'
 import { HistoryPanel } from '@/components/settings/HistoryPanel'
+import { WheelManager } from '@/components/settings/WheelManager'
 import { CanvasLayer } from '@/components/effects/CanvasLayer'
-import { usePrefsStore } from '@/stores/prefsStore'
+import { usePrefsStore, FONT_STACKS } from '@/stores/prefsStore'
 import { useWheelStore } from '@/stores/wheelStore'
 import { decodeShare } from '@/core/share-codec'
-import { FONT_STACKS } from '@/stores/prefsStore'
 import { useTranslation } from 'react-i18next'
+import { useSessionStore } from '@/stores/sessionStore'
 
 export default function App() {
   const { t } = useTranslation()
   const { themeId, fontId, setTheme } = usePrefsStore()
   const replaceActiveWheel = useWheelStore((s) => s.replaceActiveWheel)
+  const wheel = useWheelStore((s) => s.getActiveWheel())
+  const spinState = useSessionStore((s) => s.spinState)
+  const statusRef = useRef<HTMLDivElement>(null)
 
-  // Apply theme and font on mount / changes
+  // Apply theme/font on mount and changes
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeId)
   }, [themeId])
@@ -25,7 +29,19 @@ export default function App() {
     document.documentElement.style.setProperty('--font-body', FONT_STACKS[fontId])
   }, [fontId])
 
-  // Parse share URL on first load
+  // Respect OS prefers-reduced-motion
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const store = usePrefsStore.getState()
+    if (mq.matches && !store.reducedMotion) store.setReducedMotion(true)
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) usePrefsStore.getState().setReducedMotion(true)
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // Decode share URL on first load
   useEffect(() => {
     const hash = location.hash.slice(1)
     if (!hash) return
@@ -36,10 +52,7 @@ export default function App() {
       id: '',
       title: shared.title,
       excludeMode: false,
-      sectors: shared.sectors.map((s) => ({
-        ...s,
-        id: crypto.randomUUID(),
-      })),
+      sectors: shared.sectors.map((s) => ({ ...s, id: crypto.randomUUID() })),
       createdAt: now,
       updatedAt: now,
     })
@@ -69,47 +82,84 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '12px 20px',
+            padding: '10px 18px',
             borderBottom: '1px solid var(--border)',
             background: 'var(--bg-panel)',
-            backdropFilter: 'blur(12px)',
+            backdropFilter: 'blur(14px)',
             flexShrink: 0,
           }}
         >
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 900,
-              letterSpacing: '-0.03em',
-              background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              margin: 0,
-            }}
-          >
-            WHIRL
-          </h1>
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                letterSpacing: '-0.04em',
+                background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                margin: 0,
+                lineHeight: 1,
+              }}
+            >
+              WHIRL
+            </h1>
+            {/* Current wheel name chip */}
+            <span
+              style={{
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 20,
+                padding: '2px 10px',
+                maxWidth: 160,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={wheel.title}
+            >
+              {wheel.title}
+            </span>
+          </div>
+
           <nav
-            style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+            style={{ display: 'flex', gap: 6, alignItems: 'center' }}
             aria-label="Toolbar"
           >
+            <WheelManager />
             <HistoryPanel />
             <SharePanel />
             <SettingsPanel />
           </nav>
         </header>
 
-        {/* Main content */}
-        <main
-          style={{
-            display: 'flex',
-            flex: 1,
-            overflow: 'hidden',
-          }}
+        {/* Spinning status for screen readers */}
+        <div
+          ref={statusRef}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
         >
-          {/* Desktop: side-by-side; Mobile: stacked */}
+          {spinState === 'accelerating'
+            ? t('wheel.spinning')
+            : spinState === 'idle'
+              ? t('wheel.spin')
+              : ''}
+        </div>
+
+        {/* Main layout */}
+        <main
+          style={{ display: 'flex', flex: 1, overflow: 'hidden' }}
+          id="main-content"
+          tabIndex={-1}
+        >
           <div
+            className="app-layout"
             style={{
               display: 'flex',
               flex: 1,
@@ -126,6 +176,7 @@ export default function App() {
                 justifyContent: 'center',
                 padding: 24,
                 minWidth: 0,
+                position: 'relative',
               }}
             >
               <WheelContainer />
@@ -138,7 +189,7 @@ export default function App() {
                 flexShrink: 0,
                 borderLeft: '1px solid var(--border)',
                 background: 'var(--bg-panel)',
-                padding: '0 16px',
+                padding: '0 14px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
@@ -151,21 +202,44 @@ export default function App() {
         </main>
       </div>
 
-      <style>{mobileStyles}</style>
+      {/* Skip to main content link */}
+      <a
+        href="#main-content"
+        style={{
+          position: 'fixed',
+          top: -60,
+          left: 12,
+          background: 'var(--accent)',
+          color: '#fff',
+          padding: '8px 16px',
+          borderRadius: 6,
+          fontSize: 14,
+          textDecoration: 'none',
+          zIndex: 9999,
+          transition: 'top 0.2s',
+        }}
+        onFocus={(e) => { e.currentTarget.style.top = '12px' }}
+        onBlur={(e) => { e.currentTarget.style.top = '-60px' }}
+      >
+        Skip to main content
+      </a>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .app-layout {
+            flex-direction: column !important;
+          }
+          aside {
+            width: 100% !important;
+            border-left: none !important;
+            border-top: 1px solid var(--border);
+            max-height: 44vh;
+          }
+        }
+        @media (min-width: 1280px) {
+          aside { width: 360px !important; }
+        }
+      `}</style>
     </>
   )
 }
-
-const mobileStyles = `
-@media (max-width: 640px) {
-  main > div {
-    flex-direction: column !important;
-  }
-  aside {
-    width: 100% !important;
-    border-left: none !important;
-    border-top: 1px solid var(--border);
-    max-height: 45vh;
-  }
-}
-`

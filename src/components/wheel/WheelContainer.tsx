@@ -9,7 +9,13 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { usePrefsStore } from '@/stores/prefsStore'
 import { mulberry32 } from '@/core/probability'
-import { planSpin, frameAt, transition, boundaryCrossings, sectorAtPointer } from '@/core/spin-engine'
+import {
+  planSpin,
+  frameAt,
+  transition,
+  boundaryCrossings,
+  sectorAtPointer,
+} from '@/core/spin-engine'
 import { audioEngine } from '@/audio/audioEngine'
 import type { SpinState } from '@/core/spin-engine'
 
@@ -33,19 +39,18 @@ export function WheelContainer() {
 
   const [hoveredSector, setHoveredSector] = useState<number | null>(null)
   const [kickCount, setKickCount] = useState(0)
-  const [shake, setShake] = useState(false)
+  // shake amplitude: 0=none, 1=light, 2=heavy (cruise)
+  const [shakeLevel, setShakeLevel] = useState(0)
 
   const rafRef = useRef<number | null>(null)
   const planRef = useRef<ReturnType<typeof planSpin> | null>(null)
   const startTimeRef = useRef<number>(0)
   const prevAngleRef = useRef<number>(0)
   const stateRef = useRef<SpinState>('idle')
+  const heartbeatFiredRef = useRef(false)
 
-  useEffect(() => {
-    stateRef.current = spinState
-  }, [spinState])
+  useEffect(() => { stateRef.current = spinState }, [spinState])
 
-  // Sync audio volumes
   useEffect(() => { audioEngine.setBgmVolume(volumeBgm) }, [volumeBgm])
   useEffect(() => { audioEngine.setSfxVolume(volumeSfx) }, [volumeSfx])
 
@@ -61,6 +66,7 @@ export function WheelContainer() {
     await audioEngine.unlock()
     audioEngine.playWhoosh()
     audioEngine.startBgm()
+    heartbeatFiredRef.current = false
 
     const rng = mulberry32(seedCounter++)
     const weights = wheel.sectors.map((s) => s.weight)
@@ -68,17 +74,16 @@ export function WheelContainer() {
     planRef.current = plan
     prevAngleRef.current = currentAngle
 
-    const winner = wheel.sectors[plan.winnerIndex]
-    if (winner) {
-      setPendingResult({ sector: winner, plan })
+    const winnerSector = wheel.sectors[plan.winnerIndex]
+    if (winnerSector) {
+      setPendingResult({ sector: winnerSector, plan })
     }
 
     setSpinState(transition('idle', 'SPIN'))
+    setShakeLevel(0)
 
     let cruiseTriggered = false
     let brakeTriggered = false
-    let heartbeatTriggered = false
-
     startTimeRef.current = performance.now()
 
     const tick = (now: number) => {
@@ -89,51 +94,54 @@ export function WheelContainer() {
       const { angle, phase, done } = frameAt(p, elapsed)
       setAngle(angle)
 
-      // Phase transitions
       if (!cruiseTriggered && phase === 'cruising') {
         cruiseTriggered = true
         setSpinState(transition(stateRef.current, 'CRUISE'))
+        setShakeLevel(1)
       }
+
       if (!brakeTriggered && phase === 'decelerating') {
         brakeTriggered = true
         setSpinState(transition(stateRef.current, 'BRAKE'))
-        if (!reduced) setShake(true)
+        setShakeLevel(0)
       }
 
-      // Heartbeat cue in the last second
-      if (!heartbeatTriggered && elapsed > p.totalDuration - 1000 && phase === 'decelerating') {
-        heartbeatTriggered = true
+      // Heartbeat in the last 1.2s
+      if (
+        !heartbeatFiredRef.current &&
+        elapsed > p.totalDuration - 1200 &&
+        phase === 'decelerating'
+      ) {
+        heartbeatFiredRef.current = true
         audioEngine.playHeartbeat()
       }
 
-      // Tick sounds & pointer kicks at sector crossings
       const crossings = boundaryCrossings(prevAngleRef.current, angle, wheel.sectors.length)
       if (crossings > 0) {
         const speed = (angle - prevAngleRef.current) / 16
-        const normalizedSpeed = Math.min(1, speed / 5)
-        audioEngine.playTick(normalizedSpeed)
+        audioEngine.playTick(Math.min(1, speed / 5))
         setKickCount((k) => k + 1)
       }
       prevAngleRef.current = angle
 
       if (done) {
+        setShakeLevel(0)
         setSpinState(transition(stateRef.current, 'LAND'))
         audioEngine.stopBgm()
         audioEngine.playFanfare()
-        setShake(false)
 
         const winnerId = sectorAtPointer(p.finalAngle, wheel.sectors.length)
-        const winnerSector = wheel.sectors[winnerId]
-        if (winnerSector) {
+        const ws = wheel.sectors[winnerId]
+        if (ws) {
           addRecord({
             wheelId: wheel.id,
             wheelTitle: wheel.title,
-            sectorLabel: winnerSector.label,
-            sectorColor: winnerSector.color,
+            sectorLabel: ws.label,
+            sectorColor: ws.color,
             timestamp: Date.now(),
           })
           if (wheel.excludeMode) {
-            setTimeout(() => excludeWinner(winnerSector.id), 1200)
+            setTimeout(() => excludeWinner(ws.id), 1400)
           }
         }
 
@@ -147,7 +155,15 @@ export function WheelContainer() {
     }
 
     rafRef.current = requestAnimationFrame(tick)
-  }, [wheel, currentAngle, reduced, setAngle, setSpinState, setPendingResult, addRecord, excludeWinner])
+  }, [
+    wheel,
+    currentAngle,
+    setAngle,
+    setSpinState,
+    setPendingResult,
+    addRecord,
+    excludeWinner,
+  ])
 
   const handleClose = useCallback(() => {
     cancelAnimation()
@@ -155,7 +171,7 @@ export function WheelContainer() {
     setPendingResult(null)
   }, [cancelAnimation, reset, setPendingResult])
 
-  // Space bar to spin
+  // Space bar
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.code === 'Space' && e.target === document.body) {
@@ -172,6 +188,12 @@ export function WheelContainer() {
       ? wheel.sectors.findIndex((s) => s.id === pendingResult.sector.id)
       : null
 
+  // Shake variants
+  const shakeVariants = {
+    0: { x: 0, y: 0 },
+    1: { x: [0, -1.5, 1.5, -1, 1, 0], y: [0, 0.5, -0.5, 0] },
+  }
+
   return (
     <div
       style={{
@@ -184,18 +206,64 @@ export function WheelContainer() {
         justifyContent: 'center',
       }}
     >
+      {/* Lv2 cruise glow ring */}
+      <AnimatePresence>
+        {(spinState === 'cruising' || spinState === 'accelerating') && !reduced && (
+          <motion.div
+            key="cruise-glow"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            style={{
+              position: 'absolute',
+              inset: -8,
+              borderRadius: '50%',
+              background: 'transparent',
+              boxShadow:
+                spinState === 'cruising'
+                  ? '0 0 48px 16px var(--accent-glow), 0 0 100px 30px rgba(6,182,212,0.2)'
+                  : '0 0 28px 8px var(--accent-glow)',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Lv3 decel heartbeat ring */}
+      <AnimatePresence>
+        {spinState === 'decelerating' && !reduced && (
+          <motion.div
+            key="decel-pulse"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.4, 0.9, 0.4], scale: [1, 1.03, 1] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, repeat: Infinity }}
+            style={{
+              position: 'absolute',
+              inset: -4,
+              borderRadius: '50%',
+              border: '3px solid var(--accent)',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Screen-shake wrapper */}
       <motion.div
         animate={
-          shake && !reduced
-            ? { x: [0, -2, 2, -1, 1, 0], y: [0, 1, -1, 0] }
+          shakeLevel === 1 && !reduced
+            ? { x: shakeVariants[1].x, y: shakeVariants[1].y }
             : { x: 0, y: 0 }
         }
-        transition={{ duration: 0.3, repeat: shake ? Infinity : 0 }}
+        transition={
+          shakeLevel === 1
+            ? { duration: 0.35, repeat: Infinity, ease: 'linear' }
+            : { duration: 0.1 }
+        }
         style={{ width: '100%', height: '100%', position: 'relative' }}
-        onAnimationComplete={() => {
-          if (!shake) return
-        }}
       >
         <Pointer kick={kickCount} />
         <WheelSvg
@@ -204,6 +272,7 @@ export function WheelContainer() {
           highlightIndex={highlightIndex}
           onSectorHover={setHoveredSector}
           reducedMotion={reduced}
+          spinState={spinState}
         />
         <CenterButton spinState={spinState} onClick={handleSpin} />
       </motion.div>
@@ -215,7 +284,7 @@ export function WheelContainer() {
           : ''}
       </div>
 
-      {/* Sector hover tooltip */}
+      {/* Hover tooltip */}
       <AnimatePresence>
         {hoveredSector !== null && spinState === 'idle' && (
           <motion.div
@@ -224,15 +293,16 @@ export function WheelContainer() {
             exit={{ opacity: 0 }}
             style={{
               position: 'absolute',
-              bottom: -36,
+              bottom: -40,
               background: 'var(--bg-card)',
               border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '4px 10px',
+              borderRadius: 8,
+              padding: '4px 12px',
               fontSize: 13,
               color: 'var(--text-secondary)',
               pointerEvents: 'none',
               whiteSpace: 'nowrap',
+              boxShadow: 'var(--shadow)',
             }}
           >
             {wheel.sectors[hoveredSector]?.emoji}{' '}
@@ -248,9 +318,7 @@ export function WheelContainer() {
             sector={pendingResult.sector}
             title={wheel.title}
             onClose={handleClose}
-            onAgain={() => {
-              handleClose()
-            }}
+            onAgain={handleClose}
           />
         )}
       </AnimatePresence>
@@ -258,18 +326,67 @@ export function WheelContainer() {
   )
 }
 
+// ── Result Modal ─────────────────────────────────────────────────────────
+
 function ResultModal({
   sector,
   title,
   onClose,
   onAgain,
 }: {
-  sector: { label: string; color: string; emoji: string }
+  sector: { id: string; label: string; color: string; emoji: string }
   title: string
   onClose: () => void
   onAgain: () => void
 }) {
   const { t } = useTranslation()
+
+  const handleSaveImage = useCallback(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 600
+    canvas.height = 340
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Background
+    ctx.fillStyle = '#0f0f23'
+    ctx.fillRect(0, 0, 600, 340)
+
+    // Colored strip
+    ctx.fillStyle = sector.color
+    ctx.fillRect(0, 0, 600, 8)
+
+    // Title
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = '500 18px system-ui'
+    ctx.textAlign = 'center'
+    ctx.fillText(title, 300, 60)
+
+    // Emoji
+    if (sector.emoji) {
+      ctx.font = '72px system-ui'
+      ctx.fillText(sector.emoji, 300, 160)
+    }
+
+    // Label
+    ctx.fillStyle = sector.color
+    ctx.font = `800 ${sector.label.length > 10 ? 40 : 56}px system-ui`
+    ctx.fillText(sector.label, 300, sector.emoji ? 240 : 200)
+
+    // WHIRL branding
+    ctx.fillStyle = 'rgba(148,163,184,0.5)'
+    ctx.font = '400 14px system-ui'
+    ctx.fillText('WHIRL', 300, 310)
+
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `whirl-${sector.label}.png`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    }, 'image/png')
+  }, [sector, title])
 
   return (
     <motion.div
@@ -279,8 +396,8 @@ function ResultModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.65)',
-        backdropFilter: 'blur(6px)',
+        background: 'rgba(0,0,0,0.7)',
+        backdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -289,64 +406,108 @@ function ResultModal({
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.7, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ scale: 0.65, opacity: 0, y: 40 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.8, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 20 }}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 20,
-          padding: '40px 48px',
+          border: `2px solid ${sector.color}44`,
+          borderRadius: 24,
+          padding: '44px 52px',
           textAlign: 'center',
-          maxWidth: 380,
+          maxWidth: 400,
           width: '90vw',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+          boxShadow: `0 0 60px ${sector.color}33, 0 24px 60px rgba(0,0,0,0.6)`,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {t('wheel.result_detail', { title })}
-        </div>
-        {sector.emoji && (
-          <div style={{ fontSize: 48, marginBottom: 8 }}>{sector.emoji}</div>
-        )}
+        {/* Top accent line */}
         <div
           style={{
-            fontSize: 40,
-            fontWeight: 800,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: sector.color,
+          }}
+        />
+
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {t('wheel.result_detail', { title })}
+        </div>
+
+        {sector.emoji && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', delay: 0.1 }}
+            style={{ fontSize: 56, marginBottom: 10, lineHeight: 1 }}
+          >
+            {sector.emoji}
+          </motion.div>
+        )}
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          style={{
+            fontSize: sector.label.length > 10 ? 36 : 48,
+            fontWeight: 900,
             color: sector.color,
-            lineHeight: 1.2,
-            textShadow: `0 0 24px ${sector.color}55`,
-            marginBottom: 28,
+            lineHeight: 1.15,
+            textShadow: `0 0 32px ${sector.color}66`,
+            marginBottom: 32,
+            letterSpacing: '-0.02em',
           }}
         >
           {sector.label}
-        </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        </motion.div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={onAgain}
             style={{
-              background: 'var(--accent)',
+              background: sector.color,
               color: '#fff',
               border: 'none',
-              borderRadius: 8,
-              padding: '10px 24px',
+              borderRadius: 10,
+              padding: '11px 26px',
               fontSize: 15,
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
+              boxShadow: `0 4px 20px ${sector.color}44`,
             }}
           >
             {t('wheel.again')}
           </button>
           <button
+            onClick={handleSaveImage}
+            title={t('share.save_image')}
+            style={{
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '11px 16px',
+              fontSize: 15,
+              cursor: 'pointer',
+            }}
+          >
+            📷
+          </button>
+          <button
             onClick={onClose}
             style={{
               background: 'transparent',
-              color: 'var(--text-secondary)',
+              color: 'var(--text-muted)',
               border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '10px 20px',
+              borderRadius: 10,
+              padding: '11px 20px',
               fontSize: 15,
               cursor: 'pointer',
             }}
