@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { WheelContainer } from '@/components/wheel/WheelContainer'
 import { EditorPanel } from '@/components/editor/EditorPanel'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
@@ -14,6 +14,7 @@ import { useSessionStore } from '@/stores/sessionStore'
 
 export default function App() {
   const { t } = useTranslation()
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const { themeId, fontId, setTheme } = usePrefsStore()
   const replaceActiveWheel = useWheelStore((s) => s.replaceActiveWheel)
   const wheel = useWheelStore((s) => s.getActiveWheel())
@@ -185,18 +186,48 @@ export default function App() {
             {/* Editor sidebar */}
             <aside
               style={{
-                width: 320,
+                width: sidebarOpen ? 320 : 0,
                 flexShrink: 0,
-                borderLeft: '1px solid var(--border)',
+                borderLeft: sidebarOpen ? '1px solid var(--border)' : 'none',
                 background: 'var(--bg-panel)',
-                padding: '0 14px',
-                overflowY: 'auto',
+                padding: sidebarOpen ? '0 14px' : 0,
+                overflowY: sidebarOpen ? 'auto' : 'hidden',
+                overflowX: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
+                transition: 'width 0.3s ease, padding 0.3s ease',
+                position: 'relative',
               }}
               aria-label={t('editor.title')}
             >
-              <EditorPanel />
+              {/* Collapse/expand toggle */}
+              <button
+                onClick={() => setSidebarOpen((v) => !v)}
+                aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: sidebarOpen ? -16 : -32,
+                  zIndex: 50,
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-panel)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  transition: 'left 0.3s ease',
+                  boxShadow: 'var(--shadow)',
+                }}
+              >
+                {sidebarOpen ? '▶' : '◀'}
+              </button>
+              {sidebarOpen && <EditorPanel />}
             </aside>
           </div>
         </main>
@@ -237,7 +268,7 @@ export default function App() {
           }
         }
         @media (min-width: 1280px) {
-          aside { width: 360px !important; }
+          aside.sidebar-open { width: 360px !important; }
         }
       `}</style>
     </>

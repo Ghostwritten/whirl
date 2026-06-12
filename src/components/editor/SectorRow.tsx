@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useWheelStore } from '@/stores/wheelStore'
 import { MAX_WEIGHT, MIN_WEIGHT } from '@/core/types'
 import type { Sector } from '@/core/types'
+import { AvatarPicker } from './AvatarPicker'
 
 interface Props {
   sector: Sector
@@ -20,7 +21,7 @@ export function SectorRow({ sector, index, total, disabled }: Props) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '28px 32px 1fr auto 80px 28px',
+        gridTemplateColumns: '28px 32px 1fr 32px 80px 28px',
         gap: 6,
         alignItems: 'center',
         background: 'var(--bg-card)',
@@ -83,16 +84,11 @@ export function SectorRow({ sector, index, total, disabled }: Props) {
         style={inputStyle}
       />
 
-      {/* Emoji */}
-      <input
-        type="text"
+      {/* Emoji / Avatar Picker */}
+      <AvatarPicker
         value={sector.emoji}
-        maxLength={4}
-        onChange={(e) => updateSector(sector.id, { emoji: e.target.value })}
+        onChange={(emoji) => updateSector(sector.id, { emoji })}
         disabled={disabled}
-        placeholder="😀"
-        aria-label={t('editor.sector_emoji')}
-        style={{ ...inputStyle, width: 38, textAlign: 'center' }}
       />
 
       {/* Weight slider */}

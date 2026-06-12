@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { WheelSvg } from './WheelSvg'
@@ -37,12 +37,20 @@ export function WheelContainer() {
   const setPendingResult = useSessionStore((s) => s.setPendingResult)
   const reset = useSessionStore((s) => s.reset)
 
+  const wheelScale = usePrefsStore((s) => s.wheelScale)
+  const setWheelScale = usePrefsStore((s) => s.setWheelScale)
+
   const [hoveredSector, setHoveredSector] = useState<number | null>(null)
   const [kickCount, setKickCount] = useState(0)
   // shake amplitude: 0=none, 1=light, 2=heavy (cruise)
   const [shakeLevel, setShakeLevel] = useState(0)
 
+  // Drag-to-scale state
+  const dragStartXRef = useRef<number | null>(null)
+  const dragStartScaleRef = useRef<number>(1.0)
+
   const rafRef = useRef<number | null>(null)
+  const outerWrapperRef = useRef<HTMLDivElement>(null)
   const planRef = useRef<ReturnType<typeof planSpin> | null>(null)
   const startTimeRef = useRef<number>(0)
   const prevAngleRef = useRef<number>(0)
@@ -194,88 +202,157 @@ export function WheelContainer() {
     1: { x: [0, -1.5, 1.5, -1, 1, 0], y: [0, 0.5, -0.5, 0] },
   }
 
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (spinState !== 'idle') return
+    dragStartXRef.current = e.clientX
+    dragStartScaleRef.current = wheelScale
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragStartXRef.current === null) return
+    const delta = (e.clientX - dragStartXRef.current) / 300
+    setWheelScale(Math.min(1.5, Math.max(0.5, dragStartScaleRef.current + delta)))
+  }
+
+  function handlePointerUp() {
+    dragStartXRef.current = null
+  }
+
   return (
     <div
+      ref={outerWrapperRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       style={{
         position: 'relative',
-        width: '100%',
-        maxWidth: 480,
-        aspectRatio: '1',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: 8,
+        userSelect: 'none',
+        touchAction: 'none',
       }}
     >
-      {/* Lv2 cruise glow ring */}
-      <AnimatePresence>
-        {(spinState === 'cruising' || spinState === 'accelerating') && !reduced && (
-          <motion.div
-            key="cruise-glow"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            style={{
-              position: 'absolute',
-              inset: -8,
-              borderRadius: '50%',
-              background: 'transparent',
-              boxShadow:
-                spinState === 'cruising'
-                  ? '0 0 48px 16px var(--accent-glow), 0 0 100px 30px rgba(6,182,212,0.2)'
-                  : '0 0 28px 8px var(--accent-glow)',
-              pointerEvents: 'none',
-              zIndex: 2,
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Lv3 decel heartbeat ring */}
-      <AnimatePresence>
-        {spinState === 'decelerating' && !reduced && (
-          <motion.div
-            key="decel-pulse"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0.4, 0.9, 0.4], scale: [1, 1.03, 1] }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, repeat: Infinity }}
-            style={{
-              position: 'absolute',
-              inset: -4,
-              borderRadius: '50%',
-              border: '3px solid var(--accent)',
-              pointerEvents: 'none',
-              zIndex: 2,
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Screen-shake wrapper */}
-      <motion.div
-        animate={
-          shakeLevel === 1 && !reduced
-            ? { x: shakeVariants[1].x, y: shakeVariants[1].y }
-            : { x: 0, y: 0 }
-        }
-        transition={
-          shakeLevel === 1
-            ? { duration: 0.35, repeat: Infinity, ease: 'linear' }
-            : { duration: 0.1 }
-        }
-        style={{ width: '100%', height: '100%', position: 'relative' }}
+      {/* Scale wrapper */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 480,
+          aspectRatio: '1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: `scale(${wheelScale})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.15s ease',
+        }}
       >
-        <Pointer kick={kickCount} />
-        <WheelSvg
-          sectors={wheel.sectors}
-          rotation={currentAngle}
-          highlightIndex={highlightIndex}
-          onSectorHover={setHoveredSector}
-          reducedMotion={reduced}
-          spinState={spinState}
-        />
-        <CenterButton spinState={spinState} onClick={handleSpin} />
-      </motion.div>
+        {/* Lv2 cruise glow ring */}
+        <AnimatePresence>
+          {(spinState === 'cruising' || spinState === 'accelerating') && !reduced && (
+            <motion.div
+              key="cruise-glow"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              style={{
+                position: 'absolute',
+                inset: -8,
+                borderRadius: '50%',
+                background: 'transparent',
+                boxShadow:
+                  spinState === 'cruising'
+                    ? '0 0 48px 16px var(--accent-glow), 0 0 100px 30px rgba(6,182,212,0.2)'
+                    : '0 0 28px 8px var(--accent-glow)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Lv3 decel heartbeat ring */}
+        <AnimatePresence>
+          {spinState === 'decelerating' && !reduced && (
+            <motion.div
+              key="decel-pulse"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0.4, 0.9, 0.4], scale: [1, 1.03, 1] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+              style={{
+                position: 'absolute',
+                inset: -4,
+                borderRadius: '50%',
+                border: '3px solid var(--accent)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Screen-shake wrapper */}
+        <motion.div
+          animate={
+            shakeLevel === 1 && !reduced
+              ? { x: shakeVariants[1].x, y: shakeVariants[1].y }
+              : { x: 0, y: 0 }
+          }
+          transition={
+            shakeLevel === 1
+              ? { duration: 0.35, repeat: Infinity, ease: 'linear' }
+              : { duration: 0.1 }
+          }
+          style={{ width: '100%', height: '100%', position: 'relative' }}
+        >
+          <Pointer kick={kickCount} spinning={spinState !== 'idle'} />
+          <WheelSvg
+            sectors={wheel.sectors}
+            rotation={currentAngle}
+            highlightIndex={highlightIndex}
+            onSectorHover={setHoveredSector}
+            reducedMotion={reduced}
+            spinState={spinState}
+          />
+          <CenterButton spinState={spinState} onClick={handleSpin} />
+        </motion.div>
+      </div>
+
+      {/* Scale controls */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          pointerEvents: 'all',
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => setWheelScale(Math.max(0.5, wheelScale - 0.1))}
+          aria-label="Decrease wheel size"
+          style={scaleButtonStyle}
+        >
+          －
+        </button>
+        {Math.round(wheelScale * 100) !== 100 && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'center' }}>
+            {Math.round(wheelScale * 100)}%
+          </span>
+        )}
+        <button
+          onClick={() => setWheelScale(Math.min(1.5, wheelScale + 0.1))}
+          aria-label="Increase wheel size"
+          style={scaleButtonStyle}
+        >
+          ＋
+        </button>
+      </div>
 
       {/* Aria live region */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -518,4 +595,19 @@ function ResultModal({
       </motion.div>
     </motion.div>
   )
+}
+
+const scaleButtonStyle: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--text-secondary)',
+  cursor: 'pointer',
+  fontSize: 14,
+  width: 28,
+  height: 28,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
 }

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { encodeShare } from '@/core/share-codec'
@@ -52,6 +52,18 @@ export function SharePanel() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function handleTwitter() {
+    const url = buildUrl()
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(wheel.title)}&url=${encodeURIComponent(url)}`
+    window.open(tweetUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  function handleReddit() {
+    const url = buildUrl()
+    const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(wheel.title)}`
+    window.open(redditUrl, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div ref={panelRef} style={{ position: 'relative' }}>
       <button
@@ -82,12 +94,14 @@ export function SharePanel() {
               zIndex: 200,
               display: 'flex',
               flexDirection: 'column',
-              gap: 12,
+              gap: 10,
             }}
           >
             <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               {t('share.title')}
             </h3>
+
+            {/* URL preview */}
             <div
               style={{
                 fontSize: 12,
@@ -104,22 +118,51 @@ export function SharePanel() {
             >
               {buildUrl().slice(0, 120)}…
             </div>
-            <button
-              onClick={handleCopy}
-              style={{
-                background: copied ? 'var(--accent)' : 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                color: copied ? '#fff' : 'var(--text-primary)',
-                padding: '9px 16px',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              {copied ? t('share.copied') : t('share.copy')}
-            </button>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* Copy Link */}
+              <button
+                onClick={handleCopy}
+                style={{
+                  ...actionBtnStyle,
+                  background: copied ? 'var(--accent)' : 'var(--bg-card)',
+                  color: copied ? '#fff' : 'var(--text-primary)',
+                  border: `1px solid ${copied ? 'var(--accent)' : 'var(--border)'}`,
+                }}
+              >
+                <span>📋</span>
+                <span>{copied ? t('share.copied') : t('share.copy')}</span>
+              </button>
+
+              {/* Twitter / X */}
+              <button
+                onClick={handleTwitter}
+                style={{
+                  ...actionBtnStyle,
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span style={{ fontWeight: 900, fontSize: 15 }}>𝕏</span>
+                <span>Twitter</span>
+              </button>
+
+              {/* Reddit */}
+              <button
+                onClick={handleReddit}
+                style={{
+                  ...actionBtnStyle,
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span>🔴</span>
+                <span>Reddit</span>
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -135,4 +178,18 @@ const iconBtnStyle: React.CSSProperties = {
   padding: '6px 10px',
   fontSize: 18,
   cursor: 'pointer',
+}
+
+const actionBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  width: '100%',
+  padding: '9px 14px',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  borderRadius: 8,
+  transition: 'all 0.15s',
+  textAlign: 'left',
 }

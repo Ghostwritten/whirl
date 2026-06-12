@@ -26,6 +26,7 @@ const LANG_LABELS: Record<SupportedLang, string> = {
   'en-US': 'English',
   'zh-CN': '中文',
   'ja-JP': '日本語',
+  'ko-KR': '한국어',
 }
 
 export function SettingsPanel() {

@@ -16,8 +16,11 @@ const R = 200
 const CX = 220
 const CY = 220
 const VIEWBOX = `0 0 ${CX * 2} ${CY * 2}`
-const LABEL_R = R * 0.62
-const EMOJI_R = R * 0.87
+// When sector has emoji: avatar at R*0.76, label smaller at R*0.46
+// When no emoji: label at mid-radius R*0.63
+const LABEL_R_DEFAULT = R * 0.63
+const LABEL_R_WITH_AVATAR = R * 0.46
+const AVATAR_R = R * 0.76
 
 function polarToXY(angle: number, r: number, cx: number, cy: number) {
   const rad = ((angle - 90) * Math.PI) / 180
@@ -70,16 +73,21 @@ export const WheelSvg = React.memo(function WheelSvg({
         const end = (i + 1) * step
         const mid = start + step / 2
         const textColor = readableTextColor(sector.color)
-        const labelPos = polarToXY(mid, LABEL_R, CX, CY)
-        const emojiPos = polarToXY(mid, EMOJI_R, CX, CY)
+        const hasEmoji = Boolean(sector.emoji)
+        const labelR = hasEmoji ? LABEL_R_WITH_AVATAR : LABEL_R_DEFAULT
+        const labelPos = polarToXY(mid, labelR, CX, CY)
+        const avatarPos = polarToXY(mid, AVATAR_R, CX, CY)
         const path = sectorPath(start, end, R, CX, CY)
-        const fontSize = clampFontSize(sector.label, 15)
+        const fontSize = hasEmoji
+          ? Math.min(12, 200 / n)
+          : clampFontSize(sector.label, 15)
+        const avatarFontSize = Math.min(28, 320 / n)
         const isHighlighted = highlightIndex === i
         const scale = isHighlighted ? 1.045 : 1
         const textRotate = mid - 90
-        return { i, path, sector, textColor, labelPos, emojiPos, fontSize, scale, isHighlighted, textRotate }
+        return { i, path, sector, textColor, labelPos, avatarPos, fontSize, avatarFontSize, scale, isHighlighted, textRotate, hasEmoji }
       }),
-    [sectors, step, highlightIndex],
+    [sectors, step, highlightIndex, n],
   )
 
   const handleMouseEnter = useCallback(
@@ -137,7 +145,7 @@ export const WheelSvg = React.memo(function WheelSvg({
       </defs>
 
       {/* Sectors */}
-      {paths.map(({ i, path, sector, textColor, labelPos, emojiPos, fontSize, scale, isHighlighted, textRotate }) => (
+      {paths.map(({ i, path, sector, textColor, labelPos, avatarPos, fontSize, avatarFontSize, scale, isHighlighted, textRotate, hasEmoji }) => (
         <g
           key={sector.id}
           style={{
@@ -168,15 +176,15 @@ export const WheelSvg = React.memo(function WheelSvg({
             />
           )}
 
-          {sector.emoji && (
+          {hasEmoji && (
             <text
-              x={emojiPos.x}
-              y={emojiPos.y}
+              x={avatarPos.x}
+              y={avatarPos.y}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize={Math.min(14, 280 / n)}
+              fontSize={avatarFontSize}
               style={{ userSelect: 'none' }}
-              transform={`rotate(${textRotate}, ${emojiPos.x}, ${emojiPos.y})`}
+              transform={`rotate(${textRotate}, ${avatarPos.x}, ${avatarPos.y})`}
             >
               {sector.emoji}
             </text>

@@ -7,18 +7,21 @@ async function loadLocale(lang: string) {
       return (await import('./locales/zh-CN.json')).default
     case 'ja-JP':
       return (await import('./locales/ja-JP.json')).default
+    case 'ko-KR':
+      return (await import('./locales/ko-KR.json')).default
     default:
       return (await import('./locales/en-US.json')).default
   }
 }
 
-export const SUPPORTED_LANGS = ['en-US', 'zh-CN', 'ja-JP'] as const
+export const SUPPORTED_LANGS = ['en-US', 'zh-CN', 'ja-JP', 'ko-KR'] as const
 export type SupportedLang = (typeof SUPPORTED_LANGS)[number]
 
 export function detectLang(): SupportedLang {
   const nav = navigator.language
   if (nav.startsWith('zh')) return 'zh-CN'
   if (nav.startsWith('ja')) return 'ja-JP'
+  if (nav.startsWith('ko')) return 'ko-KR'
   return 'en-US'
 }
 

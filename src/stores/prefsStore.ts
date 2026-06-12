@@ -18,12 +18,14 @@ interface PrefsState {
   volumeBgm: number
   volumeSfx: number
   reducedMotion: boolean
+  wheelScale: number
   setTheme: (id: ThemeId) => void
   setFont: (id: FontId) => void
   setLanguage: (lang: SupportedLang) => void
   setVolumeBgm: (v: number) => void
   setVolumeSfx: (v: number) => void
   setReducedMotion: (v: boolean) => void
+  setWheelScale: (v: number) => void
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -35,6 +37,7 @@ export const usePrefsStore = create<PrefsState>()(
       volumeBgm: 0.4,
       volumeSfx: 0.7,
       reducedMotion: false,
+      wheelScale: 1.0,
 
       setTheme(id) {
         document.documentElement.setAttribute('data-theme', id)
@@ -51,6 +54,7 @@ export const usePrefsStore = create<PrefsState>()(
       setVolumeBgm: (volumeBgm) => set({ volumeBgm }),
       setVolumeSfx: (volumeSfx) => set({ volumeSfx }),
       setReducedMotion: (reducedMotion) => set({ reducedMotion }),
+      setWheelScale: (v) => set({ wheelScale: Math.min(1.5, Math.max(0.5, v)) }),
     }),
     { name: 'whirl-prefs', version: 1 },
   ),
