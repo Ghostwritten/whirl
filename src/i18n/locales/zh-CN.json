@@ -21,6 +21,7 @@
   "editor.max_sectors": "最多 {{max}} 个选项",
   "editor.exclude_mode": "中选后自动移除（轮流分配模式）",
   "editor.templates": "模板",
+  "editor.wheel_size": "转盘大小",
   "templates.load": "载入模板",
   "settings.title": "设置",
   "settings.theme": "主题",

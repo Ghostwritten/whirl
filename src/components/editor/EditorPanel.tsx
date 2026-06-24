@@ -5,6 +5,7 @@ import { SectorRow } from './SectorRow'
 import { TEMPLATES } from './TEMPLATES'
 import { useWheelStore } from '@/stores/wheelStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import { usePrefsStore } from '@/stores/prefsStore'
 import { MAX_SECTORS } from '@/core/types'
 
 export function EditorPanel() {
@@ -16,6 +17,9 @@ export function EditorPanel() {
   const replaceActiveWheel = useWheelStore((s) => s.replaceActiveWheel)
   const spinState = useSessionStore((s) => s.spinState)
   const disabled = spinState !== 'idle'
+
+  const wheelScale = usePrefsStore((s) => s.wheelScale)
+  const setWheelScale = usePrefsStore((s) => s.setWheelScale)
 
   const [showTemplates, setShowTemplates] = useState(false)
 
@@ -143,6 +147,40 @@ export function EditorPanel() {
         </button>
       )}
 
+      {/* Wheel scale */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {t('editor.wheel_size')}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {Math.round(wheelScale * 100)}%
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => setWheelScale(Math.max(0.5, wheelScale - 0.1))}
+            aria-label="Decrease wheel size"
+            style={iconBtnSmall}
+          >－</button>
+          <input
+            type="range"
+            min={0.5}
+            max={1.5}
+            step={0.05}
+            value={wheelScale}
+            onChange={(e) => setWheelScale(parseFloat(e.target.value))}
+            aria-label={t('editor.wheel_size')}
+            style={{ flex: 1, accentColor: 'var(--accent)' }}
+          />
+          <button
+            onClick={() => setWheelScale(Math.min(1.5, wheelScale + 0.1))}
+            aria-label="Increase wheel size"
+            style={iconBtnSmall}
+          >＋</button>
+        </div>
+      </div>
+
       {/* Exclude mode */}
       <label
         style={{
@@ -165,6 +203,22 @@ export function EditorPanel() {
       </label>
     </div>
   )
+}
+
+const iconBtnSmall: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--text-secondary)',
+  cursor: 'pointer',
+  fontSize: 14,
+  width: 26,
+  height: 26,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+  flexShrink: 0,
 }
 
 const outlineBtnStyle: React.CSSProperties = {

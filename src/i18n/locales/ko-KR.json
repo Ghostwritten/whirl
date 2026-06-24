@@ -21,6 +21,7 @@
   "editor.max_sectors": "최대 {{max}}개의 항목",
   "editor.exclude_mode": "당첨된 항목 자동 제거 (로테이션 모드)",
   "editor.templates": "템플릿",
+  "editor.wheel_size": "휠 크기",
   "templates.load": "템플릿 불러오기",
   "settings.title": "설정",
   "settings.theme": "테마",

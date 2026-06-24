@@ -21,6 +21,7 @@
   "editor.max_sectors": "最大 {{max}} 項目まで",
   "editor.exclude_mode": "当選後に自動除外（ローテーションモード）",
   "editor.templates": "テンプレート",
+  "editor.wheel_size": "ホイールサイズ",
   "templates.load": "テンプレートを読み込む",
   "settings.title": "設定",
   "settings.theme": "テーマ",

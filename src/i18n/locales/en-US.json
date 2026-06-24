@@ -21,6 +21,7 @@
   "editor.max_sectors": "Maximum {{max}} options",
   "editor.exclude_mode": "Remove winner automatically (rotation mode)",
   "editor.templates": "Templates",
+  "editor.wheel_size": "Wheel Size",
   "templates.load": "Load template",
   "settings.title": "Settings",
   "settings.theme": "Theme",

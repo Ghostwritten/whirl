@@ -323,37 +323,6 @@ export function WheelContainer() {
         </motion.div>
       </div>
 
-      {/* Scale controls */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          pointerEvents: 'all',
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={() => setWheelScale(Math.max(0.5, wheelScale - 0.1))}
-          aria-label="Decrease wheel size"
-          style={scaleButtonStyle}
-        >
-          －
-        </button>
-        {Math.round(wheelScale * 100) !== 100 && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'center' }}>
-            {Math.round(wheelScale * 100)}%
-          </span>
-        )}
-        <button
-          onClick={() => setWheelScale(Math.min(1.5, wheelScale + 0.1))}
-          aria-label="Increase wheel size"
-          style={scaleButtonStyle}
-        >
-          ＋
-        </button>
-      </div>
-
       {/* Aria live region */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {spinState === 'celebrating' && pendingResult
@@ -597,17 +566,3 @@ function ResultModal({
   )
 }
 
-const scaleButtonStyle: React.CSSProperties = {
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text-secondary)',
-  cursor: 'pointer',
-  fontSize: 14,
-  width: 28,
-  height: 28,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 0,
-}
